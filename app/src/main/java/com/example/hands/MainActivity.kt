@@ -29,6 +29,9 @@ import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Box
 
 class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
