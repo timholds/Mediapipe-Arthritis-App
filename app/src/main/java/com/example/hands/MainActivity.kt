@@ -2,6 +2,13 @@ package com.example.hands
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
+import android.graphics.Matrix
+import android.graphics.Rect
+import android.graphics.YuvImage
+import android.media.Image
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -17,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,14 +32,16 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MPImage
+import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.foundation.layout.Box
 
 class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
@@ -55,7 +65,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setupHandLandmarker() {
         try {
-            val baseOptionsBuilder = HandLandmarker.BaseOptions.builder()
+            val baseOptionsBuilder = BaseOptions.builder()
                 .setModelAssetPath("hand_landmarker.task")
 
             val optionsBuilder = HandLandmarker.HandLandmarkerOptions.builder()
@@ -163,27 +173,6 @@ fun CameraPreview(
                 }
             }
 
-        handLandmarker?.let { landmarker ->
-            val baseOptionsBuilder = HandLandmarker.BaseOptions.builder()
-                .setModelAssetPath("hand_landmarker.task")
-
-            val optionsBuilder = HandLandmarker.HandLandmarkerOptions.builder()
-                .setBaseOptions(baseOptionsBuilder.build())
-                .setNumHands(2)
-                .setMinHandDetectionConfidence(0.5f)
-                .setMinHandPresenceConfidence(0.5f)
-                .setMinTrackingConfidence(0.5f)
-                .setRunningMode(RunningMode.LIVE_STREAM)
-                .setResultListener { result: HandLandmarkerResult, _ ->
-                    setHandLandmarkerResult(result)
-                }
-                .setErrorListener { error: RuntimeException ->
-                    Log.e("CameraPreview", "Hand landmarker error: $error")
-                }
-
-            HandLandmarker.createFromOptions(context, optionsBuilder.build())
-        }
-
         val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
         try {
@@ -222,19 +211,49 @@ fun CameraPreview(
 private fun processImage(imageProxy: ImageProxy, handLandmarker: HandLandmarker?) {
     val mediaImage = imageProxy.image ?: return
 
-    val imageProcessingOptions = com.google.mediapipe.tasks.vision.core.ImageProcessingOptions.builder()
-        .build()
+    try {
+        val imageProcessingOptions = ImageProcessingOptions.builder()
+            .setRotationDegrees(imageProxy.imageInfo.rotationDegrees)
+            .build()
 
-    val mpImage = com.google.mediapipe.tasks.vision.core.MPImage.Builder()
-        .setImage(mediaImage)
-        .setRotation(imageProxy.imageInfo.rotationDegrees)
-        .build()
+        // Convert mediaImage to bitmap
+        val bitmap = mediaImageToBitmap(mediaImage)
+        // Create MPImage from bitmap
+        val mpImage = BitmapImageBuilder(bitmap).build()
 
-    handLandmarker?.detectAsync(
-        mpImage,
-        imageProcessingOptions,
-        imageProxy.timestamp
-    )
+        handLandmarker?.detectAsync(
+            mpImage,
+            imageProcessingOptions,
+            System.currentTimeMillis() * 1000 // Convert to microseconds
+        )
+    } catch (e: Exception) {
+        Log.e("HandTracking", "Error processing image: ${e.message}")
+    } finally {
+        imageProxy.close()
+    }
+}
 
-    imageProxy.close()
+// Helper function to convert MediaImage to Bitmap
+private fun mediaImageToBitmap(mediaImage: Image): Bitmap {
+    val planes = mediaImage.planes
+    val yBuffer = planes[0].buffer
+    val uBuffer = planes[1].buffer
+    val vBuffer = planes[2].buffer
+
+    val ySize = yBuffer.remaining()
+    val uSize = uBuffer.remaining()
+    val vSize = vBuffer.remaining()
+
+    val nv21 = ByteArray(ySize + uSize + vSize)
+
+    yBuffer.get(nv21, 0, ySize)
+    vBuffer.get(nv21, ySize, vSize)
+    uBuffer.get(nv21, ySize + vSize, uSize)
+
+    val yuvImage = YuvImage(nv21, ImageFormat.NV21, mediaImage.width, mediaImage.height, null)
+    val out = ByteArrayOutputStream()
+    yuvImage.compressToJpeg(Rect(0, 0, mediaImage.width, mediaImage.height), 100, out)
+    val imageBytes = out.toByteArray()
+
+    return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
 }
