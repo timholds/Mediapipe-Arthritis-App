@@ -236,8 +236,12 @@ fun HandLandmarkerOverlay(
         result.landmarks().forEach { landmarks ->
             // For each landmark in the hand
             landmarks.forEach { landmark ->
-                // Scale the landmark coordinates to the canvas size
-                val x = landmark.x() * canvasWidth
+                // Mirror the x-coordinate and apply proper scaling
+                // Front camera needs horizontal flip (1.0 - x)
+                val x = (1.0f - landmark.x()) * canvasWidth
+
+                // Y-coordinate might need adjustment too
+                // Try using the direct mapping first
                 val y = landmark.y() * canvasHeight
 
                 // Draw a small circle at each landmark
@@ -248,23 +252,23 @@ fun HandLandmarkerOverlay(
                 )
             }
 
-            // Optional: Draw connections between landmarks to form hand skeleton
-            // Define connections based on MediaPipe hand landmark indices
+            // Define connections for hand skeleton
             val connections = listOf(
-                0 to 1, 1 to 2, 2 to 3, 3 to 4,  // thumb
-                0 to 5, 5 to 6, 6 to 7, 7 to 8,  // index finger
-                0 to 9, 9 to 10, 10 to 11, 11 to 12,  // middle finger
-                0 to 13, 13 to 14, 14 to 15, 15 to 16,  // ring finger
-                0 to 17, 17 to 18, 18 to 19, 19 to 20,  // pinky
-                // Optional: Add wrist connections
-                0 to 5, 5 to 9, 9 to 13, 13 to 17  // palm
+                0 to 1, 1 to 2, 2 to 3, 3 to 4,     // thumb
+                0 to 5, 5 to 6, 6 to 7, 7 to 8,     // index finger
+                0 to 9, 9 to 10, 10 to 11, 11 to 12, // middle finger
+                0 to 13, 13 to 14, 14 to 15, 15 to 16, // ring finger
+                0 to 17, 17 to 18, 18 to 19, 19 to 20, // pinky
+                0 to 5, 5 to 9, 9 to 13, 13 to 17    // palm
             )
 
+            // Draw connections
             connections.forEach { (start, end) ->
                 if (start < landmarks.size && end < landmarks.size) {
-                    val startX = landmarks[start].x() * canvasWidth
+                    // Apply the same transformation to connection endpoints
+                    val startX = (1.0f - landmarks[start].x()) * canvasWidth
                     val startY = landmarks[start].y() * canvasHeight
-                    val endX = landmarks[end].x() * canvasWidth
+                    val endX = (1.0f - landmarks[end].x()) * canvasWidth
                     val endY = landmarks[end].y() * canvasHeight
 
                     drawLine(
