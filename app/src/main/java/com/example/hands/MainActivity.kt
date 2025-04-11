@@ -42,10 +42,16 @@ import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.State
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 
 class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var handLandmarker: HandLandmarker? = null
+    private val handLandmarkerResult = mutableStateOf<HandLandmarkerResult?>(null)
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,9 +81,14 @@ class MainActivity : ComponentActivity() {
                 .setMinHandPresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
                 .setRunningMode(RunningMode.LIVE_STREAM)
-                .setResultListener { handLandmarkerResult: HandLandmarkerResult, _ ->
+                .setResultListener { result: HandLandmarkerResult, _ ->
                     // Process hand landmarks here
-                    Log.d(TAG, "Hand landmarks detected: ${handLandmarkerResult.landmarks().size}")
+                    Log.d(TAG, "Hand landmarks detected: ${result.landmarks().size}")
+
+                    // Update the state with the new result
+                    runOnUiThread {
+                        handLandmarkerResult.value = result
+                    }
                 }
                 .setErrorListener { error: RuntimeException ->
                     Log.e(TAG, "Hand landmarker error: $error")
@@ -98,6 +109,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             CameraPreview(
                 handLandmarker = handLandmarker,
+                handLandmarkerResultState = handLandmarkerResult,
                 cameraExecutor = cameraExecutor
             )
         }
@@ -145,6 +157,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CameraPreview(
     handLandmarker: HandLandmarker?,
+    handLandmarkerResultState: State<HandLandmarkerResult?>,
     cameraExecutor: ExecutorService
 ) {
     val context = LocalContext.current
@@ -202,9 +215,67 @@ fun CameraPreview(
         )
 
         HandLandmarkerOverlay(
-            result = handLandmarkerResult,
+            result = handLandmarkerResultState.value,
             modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+@Composable
+fun HandLandmarkerOverlay(
+    result: HandLandmarkerResult?,
+    modifier: Modifier = Modifier
+) {
+    if (result == null) return
+
+    Canvas(modifier = modifier) {
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+
+        // For each detected hand
+        result.landmarks().forEach { landmarks ->
+            // For each landmark in the hand
+            landmarks.forEach { landmark ->
+                // Scale the landmark coordinates to the canvas size
+                val x = landmark.x() * canvasWidth
+                val y = landmark.y() * canvasHeight
+
+                // Draw a small circle at each landmark
+                drawCircle(
+                    color = Color.Green,
+                    radius = 8f,
+                    center = Offset(x, y)
+                )
+            }
+
+            // Optional: Draw connections between landmarks to form hand skeleton
+            // Define connections based on MediaPipe hand landmark indices
+            val connections = listOf(
+                0 to 1, 1 to 2, 2 to 3, 3 to 4,  // thumb
+                0 to 5, 5 to 6, 6 to 7, 7 to 8,  // index finger
+                0 to 9, 9 to 10, 10 to 11, 11 to 12,  // middle finger
+                0 to 13, 13 to 14, 14 to 15, 15 to 16,  // ring finger
+                0 to 17, 17 to 18, 18 to 19, 19 to 20,  // pinky
+                // Optional: Add wrist connections
+                0 to 5, 5 to 9, 9 to 13, 13 to 17  // palm
+            )
+
+            connections.forEach { (start, end) ->
+                if (start < landmarks.size && end < landmarks.size) {
+                    val startX = landmarks[start].x() * canvasWidth
+                    val startY = landmarks[start].y() * canvasHeight
+                    val endX = landmarks[end].x() * canvasWidth
+                    val endY = landmarks[end].y() * canvasHeight
+
+                    drawLine(
+                        color = Color.Yellow,
+                        start = Offset(startX, startY),
+                        end = Offset(endX, endY),
+                        strokeWidth = 3f
+                    )
+                }
+            }
+        }
     }
 }
 

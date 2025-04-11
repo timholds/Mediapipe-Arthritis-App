@@ -10,7 +10,7 @@ import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmark
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 
 @Composable
-fun HandLandmarkerOverlay(
+fun HandLandmarkerOverlayOld(
     result: HandLandmarkerResult?,
     modifier: Modifier = Modifier
 ) {
